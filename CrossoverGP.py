@@ -12,25 +12,20 @@ from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.backend import clear_session
 import random
 
-game_name = 'SpaceInvaders'
 
-env = gym.make(game_name + '-v0')
+
+#######################
+## Library Functions ##
+#######################
+
+# Image size is 210 by 160
 
 def preprocess(observation):
     observation = cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
     observation = observation[34:194]
-    #observation = observation[::2,::2]
     
     observation = observation.astype('float32') / 255.0
     return observation.reshape(observation.shape[0],observation.shape[1],1)
-
-observation = preprocess(env.reset())
-num_actions = env.action_space.n
-
-img_dim1 = observation.shape[0]
-img_dim2 = observation.shape[1]
-
-# Image size is 210 by 160
 
 def generateModel(genome):
     conv_dim = len(genome)
@@ -59,11 +54,6 @@ class Genome:
         self.shape = shape
         self.weights = weights
 
-prob_complex = 0.7
-max_filters = 32
-min_length = 2
-max_length = 5
-last_layer_max = 16
 def generateRandomShape():
     new_conv_shape = []
     new_conv_shape.append(random.randint(1,max_filters))
@@ -79,29 +69,6 @@ def generateRandomShape():
     new_conv_shape.append(random.randint(1,last_layer_max))
     return new_conv_shape
     
-
-init_conv_shape = [16, 8, 8, 8]
-model = generateModel(init_conv_shape)
-
-#for w in model.get_weights():
-#    print(w.shape)
-
-# Begin ES/PSO here
-population_size = 100
-population = []
-
-# Add default 
-weights = [glorot_uniform()(w.shape) for w in model.get_weights()]
-population.append(Genome(init_conv_shape, weights))
-clear_session()
-for i in range(population_size - 1):
-    new_conv_shape = generateRandomShape()
-    print(new_conv_shape)
-    model = generateModel(new_conv_shape)
-    weights = [glorot_uniform()(w.shape) for w in model.get_weights()]
-    population.append(Genome(new_conv_shape, weights))
-    clear_session()
-    
 def generateFromGenome(genome):
     clear_session()
     model = generateModel(genome.shape)
@@ -109,11 +76,10 @@ def generateFromGenome(genome):
     return model
     
 def getActionFromModel(model, observation):
-    return np.random.choice(num_actions,  p=model.predict(np.array([preprocess(observation)]))[0])
-        
-        
-prob_change_dim = 0.5
-prob_delete = 0.7
+    return np.random.choice(
+        num_actions,
+        p=model.predict(np.array([preprocess(observation)]))[0]
+    )
 
 def mutate(genome, sigma):
     WeightGen = RandomNormal(stddev=sigma)
@@ -238,11 +204,7 @@ def crossover(genome1, genome2):
     
     new_genome = Genome(new_conv_shape, new_weights)
     return new_genome
-    
-#game_iters = 10
 
-# skip some frames to accelerate training time
-frame_skip = 7
 def eval_fitness(model, graphic):
     observation = env.reset()
     total_reward = 0
@@ -263,7 +225,57 @@ def eval_fitness(model, graphic):
         #    break
         game_step += 1
     return total_reward
-    
+
+
+#####################
+## Training Script ##
+#####################
+
+game_name = 'SpaceInvaders'
+
+env = gym.make(game_name + '-v0')
+
+observation = preprocess(env.reset())
+num_actions = env.action_space.n
+
+img_dim1 = observation.shape[0]
+img_dim2 = observation.shape[1]
+
+prob_complex = 0.7
+max_filters = 32
+min_length = 2
+max_length = 5
+last_layer_max = 16
+
+init_conv_shape = [16, 8, 8, 8]
+model = generateModel(init_conv_shape)
+
+# Begin ES/PSO here
+population_size = 100
+population = []
+
+prob_change_dim = 0.5
+prob_delete = 0.7
+
+# Add default 
+weights = [glorot_uniform()(w.shape) for w in model.get_weights()]
+population.append(Genome(init_conv_shape, weights))
+
+clear_session()
+
+for i in range(population_size - 1):
+    new_conv_shape = generateRandomShape()
+    print(new_conv_shape)
+    model = generateModel(new_conv_shape)
+    weights = [glorot_uniform()(w.shape) for w in model.get_weights()]
+    population.append(Genome(new_conv_shape, weights))
+    clear_session()
+
+#game_iters = 10
+
+# skip some frames to accelerate training time
+frame_skip = 7
+
 #eval_fitness(model, True)
 
 # Genetic Programming/Evolution Strategies code
@@ -286,6 +298,8 @@ for iter in range(iterations):
     start = time.time()
     fitness = np.array([0.0 for i in population])
     print("Evaluating fitness: ", end = '', flush=True)
+    
+    # this is where the evaluation needs to be distributed over processor cores
     for i in range(population_size):
         model = generateFromGenome(population[i])
         
@@ -302,11 +316,16 @@ for iter in range(iterations):
                 fitness[i] += curr_fitness * (game_evals - evals)
                 evals = game_evals
                 break;
-            
+            #endif
+        #endwhile
+        
         fitness[i] /= evals
         
         if(i % int(len(population)/10) == 0):
             print(str(i) + "...", end = '', flush=True)
+        #endif
+    #endfor (multiprocessing)
+    
     print()
     
     fitnesses[iter] = fitness
