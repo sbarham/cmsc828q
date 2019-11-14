@@ -12,6 +12,21 @@ from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.backend import clear_session
 import random
 
+#######################
+##     CONSTANTS     ##
+#######################
+
+prob_complex = 0.7
+max_filters = 32
+min_length = 2
+max_length = 5
+last_layer_max = 16
+
+population_size = 100
+population = []
+
+prob_change_dim = 0.5
+prob_delete = 0.7
 
 
 #######################
@@ -231,31 +246,17 @@ def eval_fitness(model, graphic):
 ## Training Script ##
 #####################
 
+# initialize some things
 game_name = 'SpaceInvaders'
-
 env = gym.make(game_name + '-v0')
-
-observation = preprocess(env.reset())
 num_actions = env.action_space.n
+observation = preprocess(env.reset())
 
 img_dim1 = observation.shape[0]
 img_dim2 = observation.shape[1]
 
-prob_complex = 0.7
-max_filters = 32
-min_length = 2
-max_length = 5
-last_layer_max = 16
-
 init_conv_shape = [16, 8, 8, 8]
 model = generateModel(init_conv_shape)
-
-# Begin ES/PSO here
-population_size = 100
-population = []
-
-prob_change_dim = 0.5
-prob_delete = 0.7
 
 # Add default 
 weights = [glorot_uniform()(w.shape) for w in model.get_weights()]
