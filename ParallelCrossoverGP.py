@@ -319,15 +319,6 @@ def evalAgent(agent):
         evals += 1
         
     ret /= evals
-
-    # get current worker id/counter
-    # p = multiprocessing.current_process()
-    # i = p._identity[0]
-
-    # print("Process {} evaluated agent.".format(i))
-
-    # return/set ret
-    # curr_fitness[i] = ret
     
     return ret
 
@@ -376,18 +367,18 @@ if __name__ == '__main__':
         fitness = np.array([0.0 for i in population])
         print("(iter {}): Evaluating fitness ... ".format(iter))
 
-        # for _ in tqdm.tqdm(
-        #     pool.imap_unordered(
-        #       evalAgent,
-        #       population
-        #     ),
-        #     total=population_size
-        # ): pass
-
+        ##############################
+        # FITNEESS EVALUATION CODE   #
+        
+        # multiprocessed version:
         fitness = np.fromiter(tqdm.tqdm(pool.map(evalAgent, population, chunksize=1)), float)
+        
+        # non-multiprocessed version:
         # fitness = np.fromiter(map(evalAgent, tqdm.tqdm(population)), float)
-        # fitness = curr_fitness
-    
+        
+        # END FITNESS EVALUATION CODE #
+        ###############################
+        
         fitnesses[iter] = fitness
         max_fitness = np.max(fitness)
         print("Mean Fitness:", np.mean(fitness), ", Max Fitness:", max_fitness)
