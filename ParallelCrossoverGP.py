@@ -51,7 +51,7 @@ game_evals = 5
 iterations = 100
 
 # number of CPU's to parallize over, might need to hardcode this for the server
-num_cpu = 4 # int(multiprocessing.cpu_count()/2-1)
+num_cpu = int(multiprocessing.cpu_count() - 1)
 
 if num_cpu < 2:
   num_cpu = 2
@@ -319,6 +319,8 @@ def evalAgent(agent):
         evals += 1
         
     ret /= evals
+
+    print("\t{}".format(ret))
     
     return ret
 
@@ -371,7 +373,9 @@ if __name__ == '__main__':
         # FITNEESS EVALUATION CODE   #
         
         # multiprocessed version:
-        fitness = np.fromiter(tqdm.tqdm(pool.map(evalAgent, population, chunksize=1)), float)
+        # fitness = np.fromiter(tqdm.tqdm(pool.map(evalAgent, population, chunksize=1)), float)
+        # fitness = np.fromiter(pool.map(evalAgent, population, chunksize=1))
+        fitness = np.array(pool.map(evalAgent, population))
         
         # non-multiprocessed version:
         # fitness = np.fromiter(map(evalAgent, tqdm.tqdm(population)), float)
