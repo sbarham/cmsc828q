@@ -12,6 +12,7 @@ from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.backend import clear_session
 import random
 import multiprocessing
+import tqdm
 
 #######################
 ##     CONSTANTS     ##
@@ -54,6 +55,8 @@ num_cpu = int(multiprocessing.cpu_count()/2-1)
 
 # directory number used to save run results (see end of code for reference)
 run_number = "9"
+
+curr_fitness = np.zeros(population_size) 
 
 
 ###############
@@ -290,17 +293,27 @@ def eval_fitness(model, graphic):
     return total_reward
     
 def evalAgent(agent):
+    print("hello world")
+    
     model = generateFromGenome(agent)
     ret = 0
         
     evals = 0
-    while evals < game_evals:
+    for i in tqdm.tqdm(range(game_evals)):
         curr_fitness = eval_fitness(model, False)
         
         ret += curr_fitness
         evals += 1
         
     ret /= evals
+
+    # get current worker id/counter
+    p = multiprocessing.current_process()
+    i = p._identity[0]
+
+    # return/set ret
+    curr_fitness[i] = ret
+    
     return ret
 
 #####################
@@ -343,8 +356,19 @@ if __name__ == '__main__':
         start = time.time()
         fitness = np.array([0.0 for i in population])
         print("Evaluating fitness: ", end = '', flush=True)
-    
-        fitness = np.array(pool.map(evalAgent, population))
+
+        
+
+        for _ in tqdm.tqdm(
+            pool.map(
+              evalAgent,
+              population
+            ),
+            total=len(population)
+        ): pass
+        
+        # fitness = np.array(pool.map(evalAgent, population))
+        fitness = curr_fitness
     
         fitnesses[iter] = fitness
         max_fitness = np.max(fitness)
