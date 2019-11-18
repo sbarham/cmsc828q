@@ -53,6 +53,9 @@ iterations = 100
 # number of CPU's to parallize over, might need to hardcode this for the server
 num_cpu = int(multiprocessing.cpu_count()/2-1)
 
+if num_cpu < 2:
+  num_cpu = 2
+
 # directory number used to save run results (see end of code for reference)
 run_number = "9"
 
@@ -292,14 +295,13 @@ def eval_fitness(model, graphic):
         game_step += 1
     return total_reward
     
-def evalAgent(agent):
-    print("hello world")
-    
+def evalAgent(agent):    
     model = generateFromGenome(agent)
     ret = 0
         
     evals = 0
-    for i in tqdm.tqdm(range(game_evals)):
+    # for i in tqdm.tqdm(range(game_evals)):
+    while evals < game_evals:
         curr_fitness = eval_fitness(model, False)
         
         ret += curr_fitness
@@ -310,6 +312,8 @@ def evalAgent(agent):
     # get current worker id/counter
     p = multiprocessing.current_process()
     i = p._identity[0]
+
+    print("Process {} evaluated agent.".format(i))
 
     # return/set ret
     curr_fitness[i] = ret
@@ -332,9 +336,11 @@ if __name__ == '__main__':
     weights = [glorot_uniform()(w.shape) for w in model.get_weights()]
     population.append(Genome(init_conv_shape, weights))
     clear_session()
-    for i in range(population_size - 1):
+
+    print("Randomizing convolution filter shapes for initial generation ...")
+    for i in tqdm.tqdm(range(population_size - 1)):
         new_conv_shape = generateRandomShape()
-        print(new_conv_shape)
+        # print(new_conv_shape)
         model = generateModel(new_conv_shape)
         weights = [glorot_uniform()(w.shape) for w in model.get_weights()]
         population.append(Genome(new_conv_shape, weights))
@@ -355,16 +361,14 @@ if __name__ == '__main__':
     for iter in range(iterations):
         start = time.time()
         fitness = np.array([0.0 for i in population])
-        print("Evaluating fitness: ", end = '', flush=True)
-
-        
+        print("Evaluating fitness: ")
 
         for _ in tqdm.tqdm(
             pool.map(
               evalAgent,
               population
             ),
-            total=len(population)
+            total=population_size
         ): pass
         
         # fitness = np.array(pool.map(evalAgent, population))
