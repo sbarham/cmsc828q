@@ -51,7 +51,7 @@ game_evals = 5
 iterations = 100
 
 # number of CPU's to parallize over, might need to hardcode this for the server
-num_cpu = int(multiprocessing.cpu_count()/2-1)
+num_cpu = 4 # int(multiprocessing.cpu_count()/2-1)
 
 if num_cpu < 2:
   num_cpu = 2
@@ -280,6 +280,7 @@ def crossover(genome1, genome2):
     return new_genome
 
 def eval_fitness(model, graphic):
+    # print("in eval_fitness!")
     observation = env.reset()
     total_reward = 0
     done = False
@@ -290,12 +291,22 @@ def eval_fitness(model, graphic):
             env.render()
         if game_step % frame_skip == 0:
             action = getActionFromModel(model,observation)
+
+        # print("before obs ...")
         observation, reward, done, info = env.step(action)
+        # print("after obs ...")
+        
         total_reward += reward
         game_step += 1
+        
+        # print("game_step={}".format(game_step))
+
+    # print("returning reward {}".format(total_reward))
+        
     return total_reward
     
-def evalAgent(agent):    
+def evalAgent(agent):
+    # print("in evalAgent!")
     model = generateFromGenome(agent)
     ret = 0
         
@@ -310,13 +321,13 @@ def evalAgent(agent):
     ret /= evals
 
     # get current worker id/counter
-    p = multiprocessing.current_process()
-    i = p._identity[0]
+    # p = multiprocessing.current_process()
+    # i = p._identity[0]
 
-    print("Process {} evaluated agent.".format(i))
+    # print("Process {} evaluated agent.".format(i))
 
     # return/set ret
-    curr_fitness[i] = ret
+    # curr_fitness[i] = ret
     
     return ret
 
@@ -356,23 +367,26 @@ if __name__ == '__main__':
     best_member = population[0]
     
 if __name__ == '__main__':
+    print("Creating a new process pool with {} processes ...".format(num_cpu))
     pool = multiprocessing.Pool(num_cpu)
     fitnesses = np.zeros((iterations, len(population)))
+    
     for iter in range(iterations):
         start = time.time()
         fitness = np.array([0.0 for i in population])
-        print("Evaluating fitness: ")
+        print("(iter {}): Evaluating fitness ... ".format(iter))
 
-        for _ in tqdm.tqdm(
-            pool.map(
-              evalAgent,
-              population
-            ),
-            total=population_size
-        ): pass
-        
-        # fitness = np.array(pool.map(evalAgent, population))
-        fitness = curr_fitness
+        # for _ in tqdm.tqdm(
+        #     pool.imap_unordered(
+        #       evalAgent,
+        #       population
+        #     ),
+        #     total=population_size
+        # ): pass
+
+        fitness = np.fromiter(tqdm.tqdm(pool.map(evalAgent, population, chunksize=1)), float)
+        # fitness = np.fromiter(map(evalAgent, tqdm.tqdm(population)), float)
+        # fitness = curr_fitness
     
         fitnesses[iter] = fitness
         max_fitness = np.max(fitness)
