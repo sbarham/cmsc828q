@@ -37,7 +37,7 @@ max_length = 5
 # maximum initial length of the last convolutional layer
 last_layer_max = 16
 
-### Mutation Constants
+### Mutation/Reproduction Constants
 # probability a mutation changes the size of the network
 prob_change_dim = 0.5
 # probability a deletion occurs 
@@ -46,6 +46,8 @@ prob_delete = 0.7
 prob_complex = 0.7
 # standard deviation of gaussian noise for weight mutation
 sigma = 0.05
+# percentage of children created through crossover
+crossover_percent = 0.2
 
 ### Training and evaluation constants
 # skip some frames to accelerate training time
@@ -66,7 +68,7 @@ if num_cpu < 2:
   num_cpu = 2
 
 # directory number used to save run results (see end of code for reference)
-run_number = datetime.now().strftime("%Y.%-m.%-y-%H:%M")
+run_number = datetime.now().strftime("%Y-%m-%d-%H-%M")
 
 curr_fitness = np.zeros(population_size) 
 
@@ -261,29 +263,36 @@ def mutate(genome, sigma):
     new_genome = Genome(new_conv_shape, new_weights)
     return new_genome
     
-# painless crossover implementation, just stack the nets on top of each other, let deleterous mutations get rid of redundancies
-# NOTE: unfinished right now
+# filter swapping crossover
 def crossover(genome1, genome2):
-    new_conv_shape = []
-    p1_shape = genome1.shape
-    p2_shape = genome2.shape
+    p1_shape = len(genome1.shape)
+    p2_shape = len(genome2.shape)
+    new_conv_shape = genome1.shape
     
-    # stack layer shapes
-    for i in range(max(len(p1_shape),len(p2_shape))):
-        dim1 = 0
-        dim2 = 0
-        if i < len(p1_shape):
-            dim1 = p1_shape[i]
-        if i < len(p2_shape):
-            dim2 = p2_shape[i]
-        new_conv_shape.append(max(dim1,dim2))
-
-    new_model = generateModel(new_conv_shape)
-    
-    new_weights = [np.zeros(w.shape) for w in new_model.get_weights()]
-    
-    
-    clear_session()
+    # make a new copy of the weights in the first genome
+    new_weights = [np.copy(w) for w in genome1.weights]
+    for i in range(p1_shape):
+        if i < p2_shape:
+            # number of filters to sample from
+            num_filters1 = genome1.shape[i]
+            num_filters2 = genome2.shape[i]
+            
+            weightIndex1 = i * 2
+            weightIndex2 = i * 2
+            
+            # we're going to swap half of the amount of filters the smaller conv-net has
+            filters_to_swap = int(min(num_filters1, num_filters2)/2)
+            
+            # sample the indices for swapping
+            filters1 = random.sample(range(num_filters1), filters_to_swap)
+            filters2 = random.sample(range(num_filters2), filters_to_swap)
+            
+            for j in range(filters_to_swap):
+                filter_size = min(new_weights[weightIndex1].shape[2],genome2.weights[weightIndex2].shape[2])
+                # swap filters
+                new_weights[weightIndex1][:,:,:filter_size,filters1[j]] = genome2.weights[weightIndex2][:,:,:filter_size,filters2[j]] 
+                # swap bias weights as well
+                new_weights[weightIndex1 + 1][filters1[j]] = genome2.weights[weightIndex2 + 1][filters2[j]] 
     
     new_genome = Genome(new_conv_shape, new_weights)
     return new_genome
@@ -367,6 +376,7 @@ if __name__ == '__main__':
     
     # 1 slot for elitism
     num_children = len(population) - num_parents - 1
+    num_crossover = int(num_children * crossover_percent)
 
     best_overall = population[0]
     best_fitness = 0.0
@@ -421,8 +431,13 @@ if __name__ == '__main__':
         best = np.argpartition(fitness, -num_parents)[-num_parents:]
         parents = [population[i] for i in best]
         
-        random_select = np.random.randint(num_parents, size=(num_children))
-        children = [mutate(parents[i], sigma) for i in random_select]
+        children = [None for i in range(num_children)]
+        # just mutation
+        random_select = np.random.randint(num_parents, size=(num_children - num_crossover))
+        children[num_crossover:] = [mutate(parents[i], sigma) for i in random_select]
+        # children produced from crossover
+        random_crossover_select = [random.sample(range(num_parents),2) for i in range(num_crossover)]
+        children[:num_crossover] = [mutate(crossover(parents[i],parents[j]), sigma) for (i,j) in random_crossover_select]
         
         population[:num_parents] = parents
         population[num_parents:num_parents + num_children] = children
