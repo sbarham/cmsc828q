@@ -1,4 +1,4 @@
-
+# make sure we're in home
 cd ~
 
 # set up conda
@@ -13,3 +13,6 @@ pip install tf-nightly
 # install gym
 pip install gym
 pip install gym[atari]
+
+# install python-opengl
+sudo apt-get install python-opengl

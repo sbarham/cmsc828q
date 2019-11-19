@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+
 # Install TensorFlow
 import numpy as np
 import tensorflow as tf
@@ -10,13 +11,21 @@ import time
 from tensorflow.keras.initializers import glorot_uniform
 from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.backend import clear_session
+import os
 import random
 import multiprocessing
 import tqdm
+import argparse
+from datetime import datetime
+
 
 #######################
 ##     CONSTANTS     ##
 #######################
+
+### Rendering/Graphics-related constants
+# whether or not to render the environment after training
+GRAPHIC = False
 
 ### Network initialization constants
 # maximum initial number of filters per layer
@@ -48,7 +57,7 @@ selection = 0.2
 # how many game evaluations to determine fitness
 game_evals = 5
 # how many evolution iterations to run
-iterations = 100
+iterations = 1
 
 # number of CPU's to parallize over, might need to hardcode this for the server
 num_cpu = int(multiprocessing.cpu_count() - 1)
@@ -57,7 +66,7 @@ if num_cpu < 2:
   num_cpu = 2
 
 # directory number used to save run results (see end of code for reference)
-run_number = "9"
+run_number = datetime.now().strftime("%Y.%-m.%-y-%H:%M")
 
 curr_fitness = np.zeros(population_size) 
 
@@ -280,7 +289,6 @@ def crossover(genome1, genome2):
     return new_genome
 
 def eval_fitness(model, graphic):
-    # print("in eval_fitness!")
     observation = env.reset()
     total_reward = 0
     done = False
@@ -292,26 +300,18 @@ def eval_fitness(model, graphic):
         if game_step % frame_skip == 0:
             action = getActionFromModel(model,observation)
 
-        # print("before obs ...")
         observation, reward, done, info = env.step(action)
-        # print("after obs ...")
         
         total_reward += reward
         game_step += 1
         
-        # print("game_step={}".format(game_step))
-
-    # print("returning reward {}".format(total_reward))
-        
     return total_reward
     
-def evalAgent(agent):
-    # print("in evalAgent!")
+def evalAgent(agent):    
     model = generateFromGenome(agent)
     ret = 0
         
     evals = 0
-    # for i in tqdm.tqdm(range(game_evals)):
     while evals < game_evals:
         curr_fitness = eval_fitness(model, False)
         
@@ -320,7 +320,7 @@ def evalAgent(agent):
         
     ret /= evals
 
-    print("\t{}".format(ret))
+    # print("\t{}".format(ret))
     
     return ret
 
@@ -330,6 +330,19 @@ def evalAgent(agent):
 
 # Genetic Programming/Evolution Strategies code
 if __name__ == '__main__':
+    # initialize our argument parser
+    parser = argparse.ArgumentParser(description="Evolve a network for playing Space Invaders.")
+    parser.add_argument("-N", "--run_number", help="the distinguishing number to use when saving the training run's results")
+
+    # parse the command-line arguments
+    args = parser.parse_args()
+
+    # assign the command-line arguments to the proper global variables
+    run_number = run_number if args.run_number is None else args.run_number
+    
+    # make sure Linux is not forking
+    multiprocessing.set_start_method("spawn")
+  
     init_conv_shape = [16, 8, 8, 8]
     model = generateModel(init_conv_shape)
 
@@ -373,9 +386,19 @@ if __name__ == '__main__':
         # FITNEESS EVALUATION CODE   #
         
         # multiprocessed version:
-        # fitness = np.fromiter(tqdm.tqdm(pool.map(evalAgent, population, chunksize=1)), float)
+        fitness = np.fromiter(
+          tqdm.tqdm(
+            pool.imap(
+              evalAgent,
+              population,
+              chunksize=1
+            ),
+            total= len(population)
+          ),
+          float
+        )
         # fitness = np.fromiter(pool.map(evalAgent, population, chunksize=1))
-        fitness = np.array(pool.map(evalAgent, population))
+        # fitness = np.array(pool.map(evalAgent, population))
         
         # non-multiprocessed version:
         # fitness = np.fromiter(map(evalAgent, tqdm.tqdm(population)), float)
@@ -408,21 +431,26 @@ if __name__ == '__main__':
         print("Iteration", str(iter), "finished in", end - start, "seconds")
 
     model = generateFromGenome(best_overall)
-    eval_fitness(model, True)
+    eval_fitness(model, GRAPHIC)
     
-    tf.saved_model.save(model, "./savedmodels/" + game_name + "/" + run_number + "/besto/")
+    tf.saved_model.save(model, "./savedmodels/" + game_name + "/" + str(run_number) + "/besto/")
     clear_session()
 
     model = generateFromGenome(best_member)
-    tf.saved_model.save(model, "./savedmodels/" + game_name + "/" + run_number + "/bestf/")
+    tf.saved_model.save(model, "./savedmodels/" + game_name + "/" + str(run_number) + "/bestf/")
 
     fig = plt.figure()
     x = range(iterations)
     for xe, ye in zip(x, fitnesses):
         plt.scatter([xe] * len(ye), ye, color='gray')
-        
+
+    # plot
     plt.plot(x, np.mean(fitnesses, axis=1), color='red')
-    plt.savefig('./results/run' + run_number + "results")
+        
+    # save everything to file
+    name_prefix = './results/' + str(run_number) + "_results"
+    np.save(name_prefix, fitnesses)
+    plt.savefig(name_prefix + ".png")
 
-
+    # close the environment
     env.close()
