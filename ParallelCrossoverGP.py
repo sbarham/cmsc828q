@@ -27,6 +27,12 @@ from datetime import datetime
 # whether or not to render the environment after training
 GRAPHIC = False
 
+### Sampling-related constants
+# set to None in order to use the model's softmax output
+# set to < 0.3 in order to sharpen probability peaks (0.2 is a good default)
+# set to < 0.1 in order to make nearly deterministic
+temperature = None
+
 ### Network initialization constants
 # maximum initial number of filters per layer
 max_filters = 32
@@ -47,19 +53,20 @@ prob_complex = 0.7
 # standard deviation of gaussian noise for weight mutation
 sigma = 0.05
 # percentage of children created through crossover
-crossover_percent = 0.2
+crossover_percent = 0.0
+# percentage of multated children will be 1 - selection - crossover_percent
 
 ### Training and evaluation constants
 # skip some frames to accelerate training time
 frame_skip = 7
 # size of training population
-population_size = 100
+population_size = 200
 # percentage of population chosen for reproduction/mutation
 selection = 0.2
 # how many game evaluations to determine fitness
 game_evals = 5
 # how many evolution iterations to run
-iterations = 1
+iterations = 100
 
 # number of CPU's to parallize over, might need to hardcode this for the server
 num_cpu = int(multiprocessing.cpu_count() - 1)
@@ -161,8 +168,30 @@ def generateFromGenome(genome):
     model.set_weights(genome.weights)
     return model
     
-def getActionFromModel(model, observation):
-    return np.random.choice(num_actions,  p=model.predict(np.array([preprocess(observation)]))[0])
+def getActionFromModel(model, observation, temperature=None):
+    """
+    temperature = 0.2 is a nice default, giving reasonably sharp
+    peaks to the distribution, without totally throwing away
+    stochasticity
+    """
+    p = model.predict(np.array([preprocess(observation)]))[0]
+    if temperature is not None:
+        tmp_scaled_p = np.exp(p / temperature)
+        p = tmp_scaled_p / np.sum(tmp_scaled_p)
+    
+    return np.random.choice(num_actions, p=p)
+
+
+def sample(softmax, temperature):
+    EPSILON = 10e-16 # to avoid taking the log of zero
+    
+    (np.array(softmax) + EPSILON).astype('float64')
+    preds = np.log(softmax) / temperature
+    exp_preds = np.exp(preds)
+    preds = exp_preds / np.sum(exp_preds)
+    probas = np.random.multinomial(1, preds, 1)
+    
+    return probas[0]
         
 
 def mutate(genome, sigma):
@@ -307,7 +336,7 @@ def eval_fitness(model, graphic):
         if graphic:
             env.render()
         if game_step % frame_skip == 0:
-            action = getActionFromModel(model,observation)
+            action = getActionFromModel(model,observation,temperature)
 
         observation, reward, done, info = env.step(action)
         

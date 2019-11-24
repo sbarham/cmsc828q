@@ -16,3 +16,6 @@ pip install gym[atari]
 
 # install python-opengl
 sudo apt-get install python-opengl
+
+# make sure we have emacs
+sudo apt-get install emacs
